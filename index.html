@@ -1,47 +1,80 @@
-<!DOCTYPE html><html lang="el"><head>
+<!DOCTYPE html>
+<html lang="el">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASMR Videos - Dark Mode</title>
+    <title>ASMR Videos - Αυτόματη Ενημέρωση</title>
     <style>
         body {
             background-color: #121212;
             color: white;
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
+            padding: 20px;
             text-align: center;
         }
 
-        iframe {
-            border: none;
-            width: 400px;   /* Ορίζουμε το πλάτος του iframe */
-            height: 400px;  /* Ορίζουμε το ύψος του iframe */
-            margin-bottom: 20px;  /* Απόσταση μεταξύ των iframes */
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.8); /* Σκιά για πιο έντονη εμφάνιση */
+        h1 {
+            margin-bottom: 30px;
         }
 
-        h1 {
-            margin-bottom: 20px;  /* Απόσταση για τον τίτλο */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            justify-items: center;
+        }
+
+        iframe {
+            width: 300px;
+            height: 300px;
+            border: none;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.7);
         }
     </style>
-<script defer="" data-domain="asmrtest.tiiny.site" src="https://analytics.tiiny.site/js/plausible.js"></script></head>
+</head>
 <body>
 
-    <h1>Παρακολουθήστε ASMR Βίντεο</h1>
+    <h1>ASMR Videos - Αυτόματη Ενημέρωση</h1>
 
-    <iframe src="https://www.youtube.com/embed/mEYKDkm4Xt8" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>
+    <div class="grid-container" id="video-grid">
+        <!-- Τα βίντεο θα φορτωθούν εδώ μέσω JavaScript -->
+    </div>
 
-    <iframe src="https://www.youtube.com/embed/gWmN-weUjMw" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>
+    <script>
+        const feedUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=UCMiJRAwDNSNzuYeN2uWa0pA"; // Το RSS Feed URL του καναλιού
 
-    <iframe src="https://www.youtube.com/embed/oAZvg0CK_OA" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>
+        // Λειτουργία για να τραβήξουμε τα βίντεο και να τα προσθέσουμε στο HTML
+        function fetchVideos() {
+            fetch(feedUrl)
+                .then(response => response.text())
+                .then(str => {
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(str, "text/xml");
+                    const entries = xmlDoc.getElementsByTagName("entry");
+                    const videoGrid = document.getElementById('video-grid');
+                    videoGrid.innerHTML = ''; // Καθαρίζουμε το grid πριν την προσθήκη νέων βίντεο
+                    
+                    // Προσθήκη των 4 πρώτων βίντεο
+                    for (let i = 0; i < 4; i++) {
+                        const video = entries[i];
+                        const videoUrl = video.getElementsByTagName("link")[0].getAttribute("href");
+                        const iframe = document.createElement('iframe');
+                        iframe.src = `https://www.youtube.com/embed/${videoUrl.split('=')[1]}`;
+                        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                        iframe.allowFullscreen = true;
+                        videoGrid.appendChild(iframe);
+                    }
+                })
+                .catch(error => console.error('Error fetching videos:', error));
+        }
 
-    <iframe src="https://www.youtube.com/embed/VK6Yhe2x1sg" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>
+        // Φορτώνουμε τα βίντεο μόλις ανοίξει η σελίδα
+        fetchVideos();
 
+        // Ρύθμιση ανανέωσης κάθε 5 λεπτά (300,000 ms)
+        setInterval(fetchVideos, 300000);
+    </script>
 
-
-</body></html>
+</body>
+</html>
