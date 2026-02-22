@@ -26,10 +26,9 @@
 
     #video-container {
       display: grid;
-      /* ΠΙΟ ΜΕΓΑΛΑ: 3 στήλες αντί για 4 */
       grid-template-columns: repeat(3, 1fr);
       gap: 22px;
-      max-width: 1680px; /* πιο πλατύ container */
+      max-width: 1680px;
       margin: 0 auto;
     }
 
@@ -147,7 +146,7 @@
       }
     }
 
-    // Embeds (privacy-enhanced)
+    // Κανονικό embed (όχι nocookie)
     const EMBED_BASE = "https://www.youtube.com/embed/";
 
     // ---- Titles (oEmbed) ----
@@ -172,83 +171,28 @@
       }
     }
 
-    // ---- YouTube IFrame API (best-effort: 1440p) ----
-    let ytApiReady = false;
-    const pendingPlayers = [];
-    const players = new Map();
-
-    function loadYouTubeApiOnce() {
-      if (document.getElementById('yt-iframe-api')) return;
-      const tag = document.createElement('script');
-      tag.id = 'yt-iframe-api';
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-    }
-
-    window.onYouTubeIframeAPIReady = function() {
-      ytApiReady = true;
-      while (pendingPlayers.length) {
-        const { iframeId } = pendingPlayers.shift();
-        tryMakePlayer(iframeId);
-      }
-    };
-
-    function forceQuality1440(player) {
-      // “πιέζουμε” (δεν εγγυάται)
-      try { player.setPlaybackQuality('hd1440'); } catch {}
-      // μερικές φορές βοηθά να το ξανασπρώξεις μετά από λίγο
-      setTimeout(() => { try { player.setPlaybackQuality('hd1440'); } catch {} }, 900);
-      setTimeout(() => { try { player.setPlaybackQuality('hd1440'); } catch {} }, 2200);
-    }
-
-    function tryMakePlayer(iframeId) {
-      if (!ytApiReady || !window.YT || !YT.Player) {
-        pendingPlayers.push({ iframeId });
-        return;
-      }
-      if (players.has(iframeId)) return;
-
-      const p = new YT.Player(iframeId, {
-        events: {
-          onReady: (e) => forceQuality1440(e.target),
-          onStateChange: (e) => {
-            if (e.data === YT.PlayerState.PLAYING) {
-              forceQuality1440(e.target);
-            }
-          }
-        }
-      });
-      players.set(iframeId, p);
-    }
-
+    // Απλό embed src (ΧΩΡΙΣ JS API, ΧΩΡΙΣ enablejsapi, ΧΩΡΙΣ forcing ποιότητας)
+    // (Αν θες "hint" για 1440p, πρόσθεσε vq:"hd1440" εδώ.)
     function buildEmbedSrc(videoId) {
-      // vq=hd1440 = hint
       const params = new URLSearchParams({
         autoplay: "0",
         rel: "0",
         modestbranding: "1",
-        playsinline: "1",
-        enablejsapi: "1",
-        vq: "hd1440"
+        playsinline: "1"
       });
       return `${EMBED_BASE}${videoId}?${params.toString()}`;
     }
 
     // ---- PRIORITY + THROTTLE LOADER ----
-    // Θέλεις να “μπουκώνει” λιγότερο; κράτα concurrency=1
     const MAX_CONCURRENCY = 1;
-
     let activeLoads = 0;
     const queue = []; // { idx, media, videoId, iframeId }
 
     function queueSort() {
-      // ΠΡΟΤΕΡΑΙΟΤΗΤΑ: μικρότερο idx (πιο πάνω/πιο πρόσφατο) πρώτα
       queue.sort((a, b) => a.idx - b.idx);
     }
 
     function computeDelay(idx) {
-      // όσο πιο κάτω, τόσο πιο αργά (μικρή κλιμάκωση)
-      // 0.. : 0ms, 1.. : 80ms, 10.. : ~300ms, 50.. : ~900ms
       return Math.min(1200, 60 + Math.floor(Math.sqrt(idx) * 90));
     }
 
@@ -267,7 +211,6 @@
 
       const delay = computeDelay(job.idx);
       setTimeout(() => {
-        // Αν πρόλαβε να φορτώσει, skip
         if (!job.media || job.media.dataset.iframeLoaded) {
           activeLoads--;
           pumpQueue();
@@ -286,9 +229,6 @@
         job.media.appendChild(iframe);
         job.media.dataset.iframeLoaded = "1";
 
-        // best-effort quality
-        tryMakePlayer(job.iframeId);
-
         activeLoads--;
         pumpQueue();
       }, delay);
@@ -296,7 +236,6 @@
 
     function enqueueIframeLoad(idx, media, videoId, iframeId) {
       if (media.dataset.iframeLoaded) return;
-      // avoid duplicates
       if (media.dataset.enqueued === "1") return;
       media.dataset.enqueued = "1";
 
@@ -324,9 +263,7 @@
           return;
         }
 
-        loadYouTubeApiOnce();
-
-        // Observer: κάνει enqueue (δεν φορτώνει άμεσα), άρα αποφεύγουμε “μπουκωμα”
+        // Observer: enqueue κοντά στο viewport
         const observer = new IntersectionObserver((entries, obs) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
@@ -336,7 +273,7 @@
             const videoId = media.dataset.videoId;
             const iframeId = media.dataset.iframeId;
 
-            // Titles φορτώνονται επίσης “κοντά” (για να μη γίνονται 100 fetch μαζί)
+            // Title κοντά στο viewport (για να μην κάνει πολλά fetch μαζί)
             const titleEl = document.getElementById(`title-${idx}`);
             if (titleEl && !titleEl.dataset.titleLoaded) {
               titleEl.dataset.titleLoaded = "1";
@@ -348,8 +285,6 @@
           }
         }, {
           root: null,
-          // Μικρότερο margin = λιγότερα iframes “μαζικά”
-          // Αν θες πιο “άμεσο”, αύξησέ το π.χ. 900px.
           rootMargin: "450px",
           threshold: 0.01
         });
@@ -387,22 +322,17 @@
           }
         });
 
-        // EXTRA: δίνουμε προβάδισμα στα πρώτα 2-3 χωρίς να περιμένουν scroll,
-        // αλλά περνάνε ΑΠΟ ΤΟΝ ΙΔΙΟ QUEUE (άρα δεν μπουκώνει).
+        // Boost στα πρώτα 3 (πάνω) μέσω queue
         const firstBoost = Math.min(3, links.length);
         for (let i = 0; i < firstBoost; i++) {
           const media = container.querySelector(`.video-media[data-idx="${i}"]`);
           if (media) {
-            const videoId = media.dataset.videoId;
-            const iframeId = media.dataset.iframeId;
-            // enqueue αμέσως
-            enqueueIframeLoad(i, media, videoId, iframeId);
+            enqueueIframeLoad(i, media, media.dataset.videoId, media.dataset.iframeId);
 
-            // και τίτλος
             const titleEl = document.getElementById(`title-${i}`);
             if (titleEl && !titleEl.dataset.titleLoaded) {
               titleEl.dataset.titleLoaded = "1";
-              fetchTitle(videoId).then(t => { titleEl.textContent = t; });
+              fetchTitle(media.dataset.videoId).then(t => { titleEl.textContent = t; });
             }
           }
         }
