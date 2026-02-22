@@ -52,18 +52,27 @@
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    /* 16:10 */
+    /* ✅ ΤΕΤΡΑΓΩΝΟ frame (1:1) */
     .video-media {
       position: relative;
       width: 100%;
-      padding-bottom: 62.5%;
+      aspect-ratio: 1 / 1;
       background: #000;
+      overflow: hidden;
     }
+
+    /*
+      ✅ Το iframe να κρατά 16:9 μέσα στο τετράγωνο
+      (letterbox: μαύρα πάνω/κάτω)
+    */
     .video-media iframe {
       position: absolute;
-      inset: 0;
+      left: 0;
+      top: 50%;
       width: 100%;
-      height: 100%;
+      aspect-ratio: 16 / 9;
+      height: auto;
+      transform: translateY(-50%);
       border: none;
       background: #000;
     }
@@ -143,7 +152,7 @@
 
     const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
 
-    // ΣΗΜΑΝΤΙΚΟ: autoplay=0 για να μη “καίει” bandwidth/CPU χωρίς λόγο
+    // autoplay=0 για να μη “καίει” bandwidth/CPU χωρίς λόγο
     function buildEmbedSrc(videoId) {
       const params = new URLSearchParams({
         autoplay: "0",
@@ -177,7 +186,7 @@
       }
     }
 
-    // IMPORTANT: για GitHub Pages σε repo subfolder, το ./ βοηθάει
+    // GitHub Pages σε repo subfolder: το ./ βοηθάει
     fetch('./data/links.txt')
       .then(response => {
         if (!response.ok) {
@@ -212,11 +221,10 @@
 
           const iframe = document.createElement('iframe');
           iframe.src = buildEmbedSrc(videoId);
-
           iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
           iframe.allowFullscreen = true;
 
-          // Browser-native lazy load για να μην “μπουκώσει” (και να μη μείνουν μαύρα)
+          // Browser-native lazy load για να μην “μπουκώσει”
           iframe.loading = "lazy";
           iframe.referrerPolicy = "strict-origin-when-cross-origin";
           iframe.title = "YouTube video player";
@@ -240,20 +248,16 @@
           iframes[i].iframe.loading = "eager";
         }
 
-        // Titles: φόρτωσέ τα “ήπια” για να μη βαράς requests όλα μαζί
-        // (οEmbed είναι ελαφρύ, αλλά αν έχεις πολλά videos καλό είναι αυτό)
+        // Titles: “ήπια” φόρτωση
         let titleIdx = 0;
         function pumpTitles() {
-          const batch = 6; // πόσα titles ανά “κύκλο”
+          const batch = 6;
           const end = Math.min(titleIdx + batch, iframes.length);
           for (; titleIdx < end; titleIdx++) {
             const item = iframes[titleIdx];
             fetchTitle(item.videoId).then(t => item.titleEl.textContent = t);
           }
-          if (titleIdx < iframes.length) {
-            // άσε λίγο “ανάσα”
-            setTimeout(pumpTitles, 250);
-          }
+          if (titleIdx < iframes.length) setTimeout(pumpTitles, 250);
         }
         pumpTitles();
       })
