@@ -44,13 +44,14 @@
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    /* 16:10 */
+    /* 16:10 (όπως πριν) */
     .video-media {
       position: relative;
       width: 100%;
       padding-bottom: 62.5%;
       background: #000;
     }
+
     .video-media iframe {
       position: absolute;
       inset: 0;
@@ -60,16 +61,50 @@
       background: #000;
     }
 
-    .video-placeholder {
+    /* Thumbnail button */
+    .video-thumb {
       position: absolute;
       inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: rgba(255,255,255,0.85);
-      font-size: 0.95rem;
-      letter-spacing: 0.2px;
+      user-select: none;
     }
+
+    .video-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: saturate(1.05) contrast(1.05);
+    }
+
+    /* Play overlay */
+    .video-thumb::after {
+      content: "";
+      width: 64px;
+      height: 64px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.55);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+      position: absolute;
+    }
+    .video-thumb::before {
+      content: "";
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-left: 18px solid #fff;
+      border-top: 12px solid transparent;
+      border-bottom: 12px solid transparent;
+      transform: translateX(4px);
+      z-index: 1;
+    }
+    .video-thumb:hover::after { background: rgba(0,0,0,0.7); }
 
     .video-title {
       color: #fff;
@@ -100,12 +135,10 @@
       border: 1px solid #ff6b6b;
     }
 
-    /* Tablet: 2 στήλες */
     @media screen and (max-width: 1024px) {
       #video-container { grid-template-columns: repeat(2, 1fr); gap: 14px; }
     }
 
-    /* Phone: 1 στήλη */
     @media screen and (max-width: 480px) {
       body { padding: 10px; }
       #video-container { grid-template-columns: 1fr; gap: 15px; }
@@ -146,8 +179,18 @@
       }
     }
 
-    // Κανονικό embed (όχι nocookie)
+    // Κανονικό YouTube embed (όχι nocookie)
     const EMBED_BASE = "https://www.youtube.com/embed/";
+
+    function buildEmbedSrc(videoId) {
+      const params = new URLSearchParams({
+        autoplay: "1",
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1"
+      });
+      return `${EMBED_BASE}${videoId}?${params.toString()}`;
+    }
 
     // ---- Titles (oEmbed) ----
     const titleCache = new Map();
@@ -171,78 +214,6 @@
       }
     }
 
-    // Απλό embed src (ΧΩΡΙΣ JS API, ΧΩΡΙΣ enablejsapi, ΧΩΡΙΣ forcing ποιότητας)
-    // (Αν θες "hint" για 1440p, πρόσθεσε vq:"hd1440" εδώ.)
-    function buildEmbedSrc(videoId) {
-      const params = new URLSearchParams({
-        autoplay: "0",
-        rel: "0",
-        modestbranding: "1",
-        playsinline: "1"
-      });
-      return `${EMBED_BASE}${videoId}?${params.toString()}`;
-    }
-
-    // ---- PRIORITY + THROTTLE LOADER ----
-    const MAX_CONCURRENCY = 1;
-    let activeLoads = 0;
-    const queue = []; // { idx, media, videoId, iframeId }
-
-    function queueSort() {
-      queue.sort((a, b) => a.idx - b.idx);
-    }
-
-    function computeDelay(idx) {
-      return Math.min(1200, 60 + Math.floor(Math.sqrt(idx) * 90));
-    }
-
-    function pumpQueue() {
-      if (activeLoads >= MAX_CONCURRENCY) return;
-      if (queue.length === 0) return;
-
-      queueSort();
-      const job = queue.shift();
-      if (!job || job.media.dataset.iframeLoaded) {
-        pumpQueue();
-        return;
-      }
-
-      activeLoads++;
-
-      const delay = computeDelay(job.idx);
-      setTimeout(() => {
-        if (!job.media || job.media.dataset.iframeLoaded) {
-          activeLoads--;
-          pumpQueue();
-          return;
-        }
-
-        const iframe = document.createElement('iframe');
-        iframe.id = job.iframeId;
-        iframe.src = buildEmbedSrc(job.videoId);
-        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-        iframe.allowFullscreen = true;
-        iframe.loading = "lazy";
-        iframe.title = "YouTube video player";
-
-        job.media.innerHTML = "";
-        job.media.appendChild(iframe);
-        job.media.dataset.iframeLoaded = "1";
-
-        activeLoads--;
-        pumpQueue();
-      }, delay);
-    }
-
-    function enqueueIframeLoad(idx, media, videoId, iframeId) {
-      if (media.dataset.iframeLoaded) return;
-      if (media.dataset.enqueued === "1") return;
-      media.dataset.enqueued = "1";
-
-      queue.push({ idx, media, videoId, iframeId });
-      pumpQueue();
-    }
-
     fetch('data/links.txt')
       .then(response => {
         if (!response.ok) {
@@ -263,78 +234,99 @@
           return;
         }
 
-        // Observer: enqueue κοντά στο viewport
+        // Lazy-load thumbnails + titles όταν πλησιάζουν
         const observer = new IntersectionObserver((entries, obs) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
 
-            const media = entry.target;
-            const idx = Number(media.dataset.idx);
-            const videoId = media.dataset.videoId;
-            const iframeId = media.dataset.iframeId;
+            const thumb = entry.target;
+            const videoId = thumb.dataset.videoId;
+            const titleEl = document.getElementById(`title-${thumb.dataset.idx}`);
 
-            // Title κοντά στο viewport (για να μην κάνει πολλά fetch μαζί)
-            const titleEl = document.getElementById(`title-${idx}`);
+            // Thumbnail
+            if (!thumb.dataset.thumbLoaded) {
+              const img = document.createElement('img');
+              const maxres = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+              const hq = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+              img.loading = "lazy";
+              img.decoding = "async";
+              img.src = maxres;
+              img.onerror = () => { img.src = hq; };
+              thumb.appendChild(img);
+              thumb.dataset.thumbLoaded = "1";
+            }
+
+            // Title
             if (titleEl && !titleEl.dataset.titleLoaded) {
               titleEl.dataset.titleLoaded = "1";
               fetchTitle(videoId).then(t => { titleEl.textContent = t; });
             }
 
-            enqueueIframeLoad(idx, media, videoId, iframeId);
-            obs.unobserve(media);
+            obs.unobserve(thumb);
           }
         }, {
           root: null,
-          rootMargin: "450px",
+          rootMargin: "500px",
           threshold: 0.01
         });
 
         links.forEach((link, idx) => {
           const videoId = getVideoId(link);
+          if (!videoId || videoId.length !== 11) return;
 
-          if (videoId && videoId.length === 11) {
-            const card = document.createElement('div');
-            card.className = 'video-card';
+          const card = document.createElement('div');
+          card.className = 'video-card';
 
-            const media = document.createElement('div');
-            media.className = 'video-media';
-            media.dataset.videoId = videoId;
-            media.dataset.idx = String(idx);
-            media.dataset.iframeId = `yt-${videoId}-${idx}`;
+          const media = document.createElement('div');
+          media.className = 'video-media';
 
-            const ph = document.createElement('div');
-            ph.className = 'video-placeholder';
-            ph.textContent = 'Loading…';
-            media.appendChild(ph);
+          const thumb = document.createElement('div');
+          thumb.className = 'video-thumb';
+          thumb.dataset.videoId = videoId;
+          thumb.dataset.idx = String(idx);
+          thumb.setAttribute('role', 'button');
+          thumb.setAttribute('tabindex', '0');
+          thumb.setAttribute('aria-label', 'Play video');
 
-            const title = document.createElement('div');
-            title.className = 'video-title';
-            title.id = `title-${idx}`;
-            title.textContent = '...';
-
-            card.appendChild(media);
-            card.appendChild(title);
-            container.appendChild(card);
-
-            observer.observe(media);
-          } else {
-            console.error('Μη έγκυρο video ID από:', link);
+          function loadIframe() {
+            if (media.querySelector('iframe')) return;
+            const iframe = document.createElement('iframe');
+            iframe.src = buildEmbedSrc(videoId);
+            iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+            iframe.allowFullscreen = true;
+            iframe.loading = "eager";
+            iframe.title = "YouTube video player";
+            media.innerHTML = '';
+            media.appendChild(iframe);
           }
+
+          thumb.addEventListener('click', loadIframe);
+          thumb.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              loadIframe();
+            }
+          });
+
+          media.appendChild(thumb);
+
+          const title = document.createElement('div');
+          title.className = 'video-title';
+          title.id = `title-${idx}`;
+          title.textContent = '...';
+
+          card.appendChild(media);
+          card.appendChild(title);
+          container.appendChild(card);
+
+          observer.observe(thumb);
         });
 
-        // Boost στα πρώτα 3 (πάνω) μέσω queue
+        // Boost: φόρτωσε thumbnails/τίτλους για τα πρώτα 3 άμεσα
         const firstBoost = Math.min(3, links.length);
         for (let i = 0; i < firstBoost; i++) {
-          const media = container.querySelector(`.video-media[data-idx="${i}"]`);
-          if (media) {
-            enqueueIframeLoad(i, media, media.dataset.videoId, media.dataset.iframeId);
-
-            const titleEl = document.getElementById(`title-${i}`);
-            if (titleEl && !titleEl.dataset.titleLoaded) {
-              titleEl.dataset.titleLoaded = "1";
-              fetchTitle(media.dataset.videoId).then(t => { titleEl.textContent = t; });
-            }
-          }
+          const thumb = container.querySelector(`.video-thumb[data-idx="${i}"]`);
+          if (thumb) observer.observe(thumb);
         }
       })
       .catch(error => {
