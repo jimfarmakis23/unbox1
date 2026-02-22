@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
   <title>YouTube Videos - Dark Mode</title>
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -31,32 +32,38 @@
       margin: 0 auto;
     }
 
-    /* Τετράγωνο container για κάθε βίντεο */
-    .video-wrapper {
-      position: relative;
-      width: 100%;
-      padding-bottom: 100%;
+    /* Κάρτα βίντεο */
+    .video-card {
       background-color: #2d2d2d;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .video-wrapper:hover {
+    .video-card:hover {
       transform: translateY(-4px);
-      box-shadow: 0 8px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    .video-wrapper iframe {
+    /* Media area (16:10) */
+    .video-media {
+      position: relative;
+      width: 100%;
+      padding-bottom: 62.5%; /* 10/16 = 0.625 => 62.5% */
+      background: #000;
+    }
+
+    .video-media iframe {
       position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       border: none;
-      background-color: #000;
+      background: #000;
     }
 
-    /* Thumbnail placeholder (αντί για iframe από την αρχή) */
+    /* Thumbnail placeholder */
     .video-thumb {
       position: absolute;
       inset: 0;
@@ -78,17 +85,16 @@
       filter: saturate(1.05) contrast(1.05);
     }
 
-    /* Play button overlay */
+    /* Play button */
     .video-thumb::after {
       content: "";
       width: 64px;
       height: 64px;
       border-radius: 999px;
-      background: rgba(0, 0, 0, 0.55);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+      background: rgba(0,0,0,0.55);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
       position: absolute;
     }
-
     .video-thumb::before {
       content: "";
       position: absolute;
@@ -100,10 +106,25 @@
       transform: translateX(4px);
       z-index: 1;
     }
+    .video-thumb:hover::after { background: rgba(0,0,0,0.7); }
 
-    .video-thumb:hover::after { background: rgba(0, 0, 0, 0.7); }
+    /* Title κάτω από το video */
+    .video-title {
+      color: #fff;
+      padding: 10px 12px 12px;
+      font-size: 0.95rem;
+      line-height: 1.25rem;
+      font-weight: 400;
+      opacity: 0.95;
 
-    /* Loading και error messages */
+      display: -webkit-box;
+      -webkit-line-clamp: 2; /* max 2 γραμμές */
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: calc(1.25rem * 2); /* σταθερό ύψος 2 γραμμών */
+    }
+
+    /* Loading/error */
     .loading, .error-message {
       grid-column: 1 / -1;
       text-align: center;
@@ -116,33 +137,23 @@
 
     .error-message {
       color: #ff6b6b;
-      background-color: #2d2d2d;
       border: 1px solid #ff6b6b;
     }
 
     /* Mobile: 2 στήλες */
     @media screen and (max-width: 768px) {
       body { padding: 10px; }
-
-      #video-container {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-      }
-
-      .video-wrapper { border-radius: 8px; }
+      #video-container { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .video-card { border-radius: 8px; }
     }
 
     /* Μικρά κινητά: 1 στήλη */
     @media screen and (max-width: 480px) {
-      #video-container {
-        grid-template-columns: 1fr;
-        gap: 15px;
-      }
-
+      #video-container { grid-template-columns: 1fr; gap: 15px; }
       h1 { margin-bottom: 20px; }
     }
 
-    /* Σκοτεινή μπάρα κύλισης */
+    /* Dark scrollbar */
     ::-webkit-scrollbar { width: 12px; height: 12px; }
     ::-webkit-scrollbar-track { background: #2d2d2d; }
     ::-webkit-scrollbar-thumb { background: #666; border-radius: 6px; }
@@ -161,17 +172,14 @@
     function getVideoId(url) {
       try {
         url = url.trim();
-
         const patterns = [
           /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
           /youtube\.com\/watch\?.+&v=([^&\n?#]+)/
         ];
-
         for (let pattern of patterns) {
           const match = url.match(pattern);
           if (match) return match[1];
         }
-
         const urlObj = new URL(url);
         return urlObj.searchParams.get('v');
       } catch (e) {
@@ -180,10 +188,31 @@
       }
     }
 
-    // Θέλεις privacy-enhanced embeds; (συνήθως καλό)
+    // Privacy-enhanced embeds (καλό για cookies/consent)
     const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
-    // Αν θες το κανονικό:
+    // Αν θες το κλασικό:
     // const EMBED_BASE = "https://www.youtube.com/embed/";
+
+    // Cache για τίτλους (να μην κάνει fetch ξανά)
+    const titleCache = new Map();
+
+    async function fetchTitle(videoId) {
+      if (titleCache.has(videoId)) return titleCache.get(videoId);
+
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent("https://www.youtube.com/watch?v=" + videoId)}&format=json`;
+      try {
+        const res = await fetch(oembedUrl);
+        if (!res.ok) throw new Error("oEmbed failed");
+        const data = await res.json();
+        const title = (data && data.title) ? data.title : "YouTube Video";
+        titleCache.set(videoId, title);
+        return title;
+      } catch (e) {
+        const fallback = "YouTube Video";
+        titleCache.set(videoId, fallback);
+        return fallback;
+      }
+    }
 
     fetch('data/links.txt')
       .then(response => {
@@ -205,30 +234,41 @@
           return;
         }
 
-        // Lazy-load thumbnails ΜΟΝΟ όταν πλησιάζουν στο viewport
+        // Observer για να φορτώνει thumbnails + τίτλους ΜΟΝΟ όταν πλησιάζουν
         const observer = new IntersectionObserver((entries, obs) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
 
             const thumb = entry.target;
             const videoId = thumb.dataset.videoId;
+            const titleEl = document.getElementById(`title-${videoId}`);
 
-            // Δημιούργησε thumbnail μόνο τώρα
-            const img = document.createElement('img');
-            const maxres = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-            const hq = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+            // 1) Thumbnail (μόνο τώρα)
+            if (!thumb.dataset.thumbLoaded) {
+              const img = document.createElement('img');
+              const maxres = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+              const hq = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-            img.loading = "lazy";
-            img.decoding = "async";
-            img.src = maxres;
-            img.onerror = () => { img.src = hq; };
+              img.loading = "lazy";
+              img.decoding = "async";
+              img.src = maxres;
+              img.onerror = () => { img.src = hq; };
 
-            thumb.appendChild(img);
+              thumb.appendChild(img);
+              thumb.dataset.thumbLoaded = "1";
+            }
+
+            // 2) Title (μόνο τώρα)
+            if (titleEl && !titleEl.dataset.titleLoaded) {
+              titleEl.dataset.titleLoaded = "1";
+              fetchTitle(videoId).then(t => { titleEl.textContent = t; });
+            }
+
             obs.unobserve(thumb);
           }
         }, {
           root: null,
-          rootMargin: "300px",
+          rootMargin: "350px", // φόρτωσε λίγο πριν φανούν
           threshold: 0.01
         });
 
@@ -236,10 +276,12 @@
           const videoId = getVideoId(link);
 
           if (videoId && videoId.length === 11) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'video-wrapper';
+            const card = document.createElement('div');
+            card.className = 'video-card';
 
-            // Placeholder (thumbnail + play)
+            const media = document.createElement('div');
+            media.className = 'video-media';
+
             const thumb = document.createElement('div');
             thumb.className = 'video-thumb';
             thumb.dataset.videoId = videoId;
@@ -248,8 +290,7 @@
             thumb.setAttribute('aria-label', 'Play video');
 
             function loadIframe() {
-              // Αν έχει ήδη φορτώσει, μην το ξανακάνεις
-              if (wrapper.querySelector('iframe')) return;
+              if (media.querySelector('iframe')) return;
 
               const iframe = document.createElement('iframe');
               iframe.src = `${EMBED_BASE}${videoId}?autoplay=1`;
@@ -258,8 +299,8 @@
               iframe.loading = "eager";
               iframe.title = "YouTube video player";
 
-              wrapper.innerHTML = '';
-              wrapper.appendChild(iframe);
+              media.innerHTML = '';
+              media.appendChild(iframe);
             }
 
             thumb.addEventListener('click', loadIframe);
@@ -270,11 +311,20 @@
               }
             });
 
-            wrapper.appendChild(thumb);
-            container.appendChild(wrapper);
+            media.appendChild(thumb);
 
-            // Παρακολούθησε για να φορτώσει thumbnail όταν πλησιάζει
+            const title = document.createElement('div');
+            title.className = 'video-title';
+            title.id = `title-${videoId}`;
+            title.textContent = '...'; // θα γεμίσει όταν πλησιάσει
+
+            card.appendChild(media);
+            card.appendChild(title);
+            container.appendChild(card);
+
+            // Παρακολούθησε για lazy thumb+title
             observer.observe(thumb);
+
           } else {
             console.error('Μη έγκυρο video ID από:', link);
           }
