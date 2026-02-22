@@ -52,27 +52,18 @@
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    /* ✅ ΤΕΤΡΑΓΩΝΟ frame (1:1) */
+    /* ✅ 16:10 (όπως ήταν πριν) */
     .video-media {
       position: relative;
       width: 100%;
-      aspect-ratio: 1 / 1;
+      padding-bottom: 62.5%; /* 10/16 = 0.625 */
       background: #000;
-      overflow: hidden;
     }
-
-    /*
-      ✅ Το iframe να κρατά 16:9 μέσα στο τετράγωνο
-      (letterbox: μαύρα πάνω/κάτω)
-    */
     .video-media iframe {
       position: absolute;
-      left: 0;
-      top: 50%;
+      inset: 0;
       width: 100%;
-      aspect-ratio: 16 / 9;
-      height: auto;
-      transform: translateY(-50%);
+      height: 100%;
       border: none;
       background: #000;
     }
@@ -248,7 +239,7 @@
           iframes[i].iframe.loading = "eager";
         }
 
-        // Titles: “ήπια” φόρτωση
+        // Titles: “ήπια” φόρτωση (batch)
         let titleIdx = 0;
         function pumpTitles() {
           const batch = 6;
