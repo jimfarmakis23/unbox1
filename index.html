@@ -18,7 +18,7 @@
     h1 {
       color: #ffffff;
       text-align: center;
-      margin-bottom: 30px;
+      margin-bottom: 26px;
       font-size: clamp(1.5rem, 5vw, 2.5rem);
       font-weight: 400;
       letter-spacing: 1px;
@@ -26,13 +26,13 @@
 
     #video-container {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      max-width: 1400px;
+      /* ΠΙΟ ΜΕΓΑΛΑ: 3 στήλες αντί για 4 */
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+      max-width: 1680px; /* πιο πλατύ container */
       margin: 0 auto;
     }
 
-    /* Κάρτα */
     .video-card {
       background-color: #2d2d2d;
       border-radius: 12px;
@@ -40,20 +40,18 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-
     .video-card:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    /* Media (16:10) */
+    /* 16:10 */
     .video-media {
       position: relative;
       width: 100%;
-      padding-bottom: 62.5%; /* 16:10 */
+      padding-bottom: 62.5%;
       background: #000;
     }
-
     .video-media iframe {
       position: absolute;
       inset: 0;
@@ -63,7 +61,6 @@
       background: #000;
     }
 
-    /* Placeholder όσο δεν έχει φορτώσει */
     .video-placeholder {
       position: absolute;
       inset: 0;
@@ -75,7 +72,6 @@
       letter-spacing: 0.2px;
     }
 
-    /* Title κάτω από το video */
     .video-title {
       color: #fff;
       padding: 10px 12px 12px;
@@ -100,21 +96,21 @@
       border-radius: 12px;
       font-size: 1.1rem;
     }
-
     .error-message {
       color: #ff6b6b;
       border: 1px solid #ff6b6b;
     }
 
-    @media screen and (max-width: 768px) {
-      body { padding: 10px; }
-      #video-container { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-      .video-card { border-radius: 8px; }
+    /* Tablet: 2 στήλες */
+    @media screen and (max-width: 1024px) {
+      #video-container { grid-template-columns: repeat(2, 1fr); gap: 14px; }
     }
 
+    /* Phone: 1 στήλη */
     @media screen and (max-width: 480px) {
+      body { padding: 10px; }
       #video-container { grid-template-columns: 1fr; gap: 15px; }
-      h1 { margin-bottom: 20px; }
+      h1 { margin-bottom: 18px; }
     }
 
     ::-webkit-scrollbar { width: 12px; height: 12px; }
@@ -154,7 +150,7 @@
     // Embeds (privacy-enhanced)
     const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
 
-    // Title cache
+    // ---- Titles (oEmbed) ----
     const titleCache = new Map();
     async function fetchTitle(videoId) {
       if (titleCache.has(videoId)) return titleCache.get(videoId);
@@ -176,10 +172,10 @@
       }
     }
 
-    // YouTube IFrame API (best-effort για ποιότητα)
-    // Σημείωση: δεν εγγυάται 2160p, αλλά προσπαθεί.
+    // ---- YouTube IFrame API (best-effort: 1440p) ----
     let ytApiReady = false;
     const pendingPlayers = [];
+    const players = new Map();
 
     function loadYouTubeApiOnce() {
       if (document.getElementById('yt-iframe-api')) return;
@@ -191,14 +187,20 @@
 
     window.onYouTubeIframeAPIReady = function() {
       ytApiReady = true;
-      // Δημιούργησε players για όσα περιμένουν
       while (pendingPlayers.length) {
         const { iframeId } = pendingPlayers.shift();
         tryMakePlayer(iframeId);
       }
     };
 
-    const players = new Map();
+    function forceQuality1440(player) {
+      // “πιέζουμε” (δεν εγγυάται)
+      try { player.setPlaybackQuality('hd1440'); } catch {}
+      // μερικές φορές βοηθά να το ξανασπρώξεις μετά από λίγο
+      setTimeout(() => { try { player.setPlaybackQuality('hd1440'); } catch {} }, 900);
+      setTimeout(() => { try { player.setPlaybackQuality('hd1440'); } catch {} }, 2200);
+    }
+
     function tryMakePlayer(iframeId) {
       if (!ytApiReady || !window.YT || !YT.Player) {
         pendingPlayers.push({ iframeId });
@@ -208,13 +210,10 @@
 
       const p = new YT.Player(iframeId, {
         events: {
-          onReady: (e) => {
-            try { e.target.setPlaybackQuality('hd2160'); } catch {}
-          },
+          onReady: (e) => forceQuality1440(e.target),
           onStateChange: (e) => {
-            // Όταν ξεκινάει playback, ξαναπροσπάθησε να το σπρώξεις σε 2160p
             if (e.data === YT.PlayerState.PLAYING) {
-              try { e.target.setPlaybackQuality('hd2160'); } catch {}
+              forceQuality1440(e.target);
             }
           }
         }
@@ -223,17 +222,86 @@
     }
 
     function buildEmbedSrc(videoId) {
-      // vq=hd2160: hint, όχι εγγύηση.
-      // enablejsapi=1: για να καλέσουμε setPlaybackQuality.
+      // vq=hd1440 = hint
       const params = new URLSearchParams({
         autoplay: "0",
         rel: "0",
         modestbranding: "1",
         playsinline: "1",
         enablejsapi: "1",
-        vq: "hd2160"
+        vq: "hd1440"
       });
       return `${EMBED_BASE}${videoId}?${params.toString()}`;
+    }
+
+    // ---- PRIORITY + THROTTLE LOADER ----
+    // Θέλεις να “μπουκώνει” λιγότερο; κράτα concurrency=1
+    const MAX_CONCURRENCY = 1;
+
+    let activeLoads = 0;
+    const queue = []; // { idx, media, videoId, iframeId }
+
+    function queueSort() {
+      // ΠΡΟΤΕΡΑΙΟΤΗΤΑ: μικρότερο idx (πιο πάνω/πιο πρόσφατο) πρώτα
+      queue.sort((a, b) => a.idx - b.idx);
+    }
+
+    function computeDelay(idx) {
+      // όσο πιο κάτω, τόσο πιο αργά (μικρή κλιμάκωση)
+      // 0.. : 0ms, 1.. : 80ms, 10.. : ~300ms, 50.. : ~900ms
+      return Math.min(1200, 60 + Math.floor(Math.sqrt(idx) * 90));
+    }
+
+    function pumpQueue() {
+      if (activeLoads >= MAX_CONCURRENCY) return;
+      if (queue.length === 0) return;
+
+      queueSort();
+      const job = queue.shift();
+      if (!job || job.media.dataset.iframeLoaded) {
+        pumpQueue();
+        return;
+      }
+
+      activeLoads++;
+
+      const delay = computeDelay(job.idx);
+      setTimeout(() => {
+        // Αν πρόλαβε να φορτώσει, skip
+        if (!job.media || job.media.dataset.iframeLoaded) {
+          activeLoads--;
+          pumpQueue();
+          return;
+        }
+
+        const iframe = document.createElement('iframe');
+        iframe.id = job.iframeId;
+        iframe.src = buildEmbedSrc(job.videoId);
+        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+        iframe.allowFullscreen = true;
+        iframe.loading = "lazy";
+        iframe.title = "YouTube video player";
+
+        job.media.innerHTML = "";
+        job.media.appendChild(iframe);
+        job.media.dataset.iframeLoaded = "1";
+
+        // best-effort quality
+        tryMakePlayer(job.iframeId);
+
+        activeLoads--;
+        pumpQueue();
+      }, delay);
+    }
+
+    function enqueueIframeLoad(idx, media, videoId, iframeId) {
+      if (media.dataset.iframeLoaded) return;
+      // avoid duplicates
+      if (media.dataset.enqueued === "1") return;
+      media.dataset.enqueued = "1";
+
+      queue.push({ idx, media, videoId, iframeId });
+      pumpQueue();
     }
 
     fetch('data/links.txt')
@@ -256,49 +324,33 @@
           return;
         }
 
-        // Φόρτωσε API (μια φορά). Δεν “βαραίνει” πολύ, αλλά το θέλουμε για best-effort 2160p.
         loadYouTubeApiOnce();
 
-        // Observer: φορτώνει iframes + titles όταν πλησιάζουν στο viewport
+        // Observer: κάνει enqueue (δεν φορτώνει άμεσα), άρα αποφεύγουμε “μπουκωμα”
         const observer = new IntersectionObserver((entries, obs) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
 
             const media = entry.target;
+            const idx = Number(media.dataset.idx);
             const videoId = media.dataset.videoId;
             const iframeId = media.dataset.iframeId;
-            const titleEl = document.getElementById(`title-${videoId}`);
 
-            // 1) Φόρτωσε iframe ΜΟΝΟ τώρα (όχι όλα μαζί)
-            if (!media.dataset.iframeLoaded) {
-              const iframe = document.createElement('iframe');
-              iframe.id = iframeId;
-              iframe.src = buildEmbedSrc(videoId);
-              iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-              iframe.allowFullscreen = true;
-              iframe.loading = "lazy";
-              iframe.title = "YouTube video player";
-
-              media.innerHTML = "";
-              media.appendChild(iframe);
-
-              media.dataset.iframeLoaded = "1";
-
-              // best-effort set quality (όταν είναι έτοιμο το API)
-              tryMakePlayer(iframeId);
-            }
-
-            // 2) Φόρτωσε title ΜΟΝΟ τώρα
+            // Titles φορτώνονται επίσης “κοντά” (για να μη γίνονται 100 fetch μαζί)
+            const titleEl = document.getElementById(`title-${idx}`);
             if (titleEl && !titleEl.dataset.titleLoaded) {
               titleEl.dataset.titleLoaded = "1";
               fetchTitle(videoId).then(t => { titleEl.textContent = t; });
             }
 
+            enqueueIframeLoad(idx, media, videoId, iframeId);
             obs.unobserve(media);
           }
         }, {
           root: null,
-          rootMargin: "800px", // Πόσο νωρίτερα να φορτώνει πριν το δεις (αύξησέ το αν θες πιο “γρήγορο” scroll)
+          // Μικρότερο margin = λιγότερα iframes “μαζικά”
+          // Αν θες πιο “άμεσο”, αύξησέ το π.χ. 900px.
+          rootMargin: "450px",
           threshold: 0.01
         });
 
@@ -312,9 +364,9 @@
             const media = document.createElement('div');
             media.className = 'video-media';
             media.dataset.videoId = videoId;
+            media.dataset.idx = String(idx);
             media.dataset.iframeId = `yt-${videoId}-${idx}`;
 
-            // Placeholder μέχρι να έρθει κοντά στο viewport
             const ph = document.createElement('div');
             ph.className = 'video-placeholder';
             ph.textContent = 'Loading…';
@@ -322,7 +374,7 @@
 
             const title = document.createElement('div');
             title.className = 'video-title';
-            title.id = `title-${videoId}`;
+            title.id = `title-${idx}`;
             title.textContent = '...';
 
             card.appendChild(media);
@@ -334,6 +386,26 @@
             console.error('Μη έγκυρο video ID από:', link);
           }
         });
+
+        // EXTRA: δίνουμε προβάδισμα στα πρώτα 2-3 χωρίς να περιμένουν scroll,
+        // αλλά περνάνε ΑΠΟ ΤΟΝ ΙΔΙΟ QUEUE (άρα δεν μπουκώνει).
+        const firstBoost = Math.min(3, links.length);
+        for (let i = 0; i < firstBoost; i++) {
+          const media = container.querySelector(`.video-media[data-idx="${i}"]`);
+          if (media) {
+            const videoId = media.dataset.videoId;
+            const iframeId = media.dataset.iframeId;
+            // enqueue αμέσως
+            enqueueIframeLoad(i, media, videoId, iframeId);
+
+            // και τίτλος
+            const titleEl = document.getElementById(`title-${i}`);
+            if (titleEl && !titleEl.dataset.titleLoaded) {
+              titleEl.dataset.titleLoaded = "1";
+              fetchTitle(videoId).then(t => { titleEl.textContent = t; });
+            }
+          }
+        }
       })
       .catch(error => {
         document.getElementById('video-container').innerHTML =
