@@ -2,14 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YouTube Videos - Dark Mode</title>
-
-  <!-- Speed up connection setup -->
-  <link rel="preconnect" href="https://www.youtube.com">
-  <link rel="preconnect" href="https://i.ytimg.com">
-  <link rel="dns-prefetch" href="https://www.youtube.com">
-  <link rel="dns-prefetch" href="https://i.ytimg.com">
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -45,7 +39,6 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-
     .video-card:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
@@ -57,17 +50,13 @@
       padding-bottom: 62.5%; /* 10/16 = 0.625 */
       background: #000;
     }
-
-    .thumbnail {
+    .video-media iframe {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      cursor: pointer;
-      transition: transform 0.2s ease;
-    }
-
-    .thumbnail:hover {
-      transform: scale(1.05);
+      border: none;
+      background: #000;
     }
 
     .video-title {
@@ -94,7 +83,6 @@
       border-radius: 12px;
       font-size: 1.1rem;
     }
-
     .error-message {
       color: #ff6b6b;
       border: 1px solid #ff6b6b;
@@ -144,12 +132,18 @@
       }
     }
 
-    // Fetch the thumbnail image for the video
-    function fetchThumbnail(videoId) {
-      return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
+
+    function buildEmbedSrc(videoId) {
+      const params = new URLSearchParams({
+        autoplay: "0",
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1",
+      });
+      return `${EMBED_BASE}${videoId}?${params.toString()}`;
     }
 
-    // Titles (oEmbed)
     const titleCache = new Map();
     async function fetchTitle(videoId) {
       if (titleCache.has(videoId)) return titleCache.get(videoId);
@@ -172,7 +166,6 @@
       }
     }
 
-    // Fetch links from text file and load thumbnails
     fetch('./data/links.txt')
       .then(response => {
         if (!response.ok) {
@@ -193,7 +186,7 @@
           return;
         }
 
-        const thumbnails = [];
+        const iframes = [];
 
         links.forEach((link, idx) => {
           const videoId = getVideoId(link);
@@ -205,13 +198,15 @@
           const media = document.createElement('div');
           media.className = 'video-media';
 
-          const thumbnailImg = document.createElement('img');
-          thumbnailImg.src = fetchThumbnail(videoId);
-          thumbnailImg.alt = "YouTube Thumbnail";
-          thumbnailImg.className = 'thumbnail';
-          thumbnailImg.onclick = () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank'); // Open video on click
+          const iframe = document.createElement('iframe');
+          iframe.src = buildEmbedSrc(videoId);
+          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+          iframe.allowFullscreen = true;
+          iframe.loading = "lazy";
+          iframe.referrerPolicy = "strict-origin-when-cross-origin";
+          iframe.title = "YouTube video player";
 
-          media.appendChild(thumbnailImg);
+          media.appendChild(iframe);
 
           const title = document.createElement('div');
           title.className = 'video-title';
@@ -222,19 +217,22 @@
           card.appendChild(title);
           container.appendChild(card);
 
-          thumbnails.push({ videoId, titleEl: title });
+          iframes.push({ iframe, videoId, titleEl: title });
         });
 
-        // Titles: “ήπια” φόρτωση (batch)
+        for (let i = 0; i < Math.min(3, iframes.length); i++) {
+          iframes[i].iframe.loading = "eager";
+        }
+
         let titleIdx = 0;
         function pumpTitles() {
           const batch = 6;
-          const end = Math.min(titleIdx + batch, thumbnails.length);
+          const end = Math.min(titleIdx + batch, iframes.length);
           for (; titleIdx < end; titleIdx++) {
-            const item = thumbnails[titleIdx];
+            const item = iframes[titleIdx];
             fetchTitle(item.videoId).then(t => item.titleEl.textContent = t);
           }
-          if (titleIdx < thumbnails.length) setTimeout(pumpTitles, 250);
+          if (titleIdx < iframes.length) setTimeout(pumpTitles, 250);
         }
         pumpTitles();
       })
