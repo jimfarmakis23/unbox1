@@ -132,16 +132,11 @@
       }
     }
 
-    const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
+    const EMBED_BASE = "https://www.youtube.com/embed/";
 
     function buildEmbedSrc(videoId) {
-      const params = new URLSearchParams({
-        autoplay: "0",
-        rel: "0",
-        modestbranding: "1",
-        playsinline: "1",
-      });
-      return `${EMBED_BASE}${videoId}?${params.toString()}`;
+      // Απλά επέλεξε το κανονικό YouTube iframe χωρίς παραμέτρους περιορισμού ποιότητας
+      return `${EMBED_BASE}${videoId}`;
     }
 
     const titleCache = new Map();
