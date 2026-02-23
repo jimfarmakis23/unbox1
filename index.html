@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
   <title>YouTube Videos - Dark Mode</title>
+
+  <!-- Speed up connection setup -->
+  <link rel="preconnect" href="https://www.youtube-nocookie.com">
+  <link rel="preconnect" href="https://www.youtube.com">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="dns-prefetch" href="https://www.youtube-nocookie.com">
+  <link rel="dns-prefetch" href="https://www.youtube.com">
+  <link rel="dns-prefetch" href="https://i.ytimg.com">
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,6 +52,7 @@
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
+    /* ✅ 16:10 (όπως ήταν πριν) */
     .video-media {
       position: relative;
       width: 100%;
@@ -132,13 +141,20 @@
       }
     }
 
-    const EMBED_BASE = "https://www.youtube.com/embed/";
+    const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
 
+    // autoplay=0 για να μη “καίει” bandwidth/CPU χωρίς λόγο
     function buildEmbedSrc(videoId) {
-      // Απλά επέλεξε το κανονικό YouTube iframe χωρίς παραμέτρους περιορισμού ποιότητας
-      return `${EMBED_BASE}${videoId}`;
+      const params = new URLSearchParams({
+        autoplay: "0",
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1"
+      });
+      return `${EMBED_BASE}${videoId}?${params.toString()}`;
     }
 
+    // Titles (oEmbed)
     const titleCache = new Map();
     async function fetchTitle(videoId) {
       if (titleCache.has(videoId)) return titleCache.get(videoId);
@@ -161,6 +177,7 @@
       }
     }
 
+    // GitHub Pages σε repo subfolder: το ./ βοηθάει
     fetch('./data/links.txt')
       .then(response => {
         if (!response.ok) {
@@ -197,6 +214,8 @@
           iframe.src = buildEmbedSrc(videoId);
           iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
           iframe.allowFullscreen = true;
+
+          // Browser-native lazy load για να μην “μπουκώσει”
           iframe.loading = "lazy";
           iframe.referrerPolicy = "strict-origin-when-cross-origin";
           iframe.title = "YouTube video player";
@@ -215,10 +234,12 @@
           iframes.push({ iframe, videoId, titleEl: title });
         });
 
+        // Eager για τα πρώτα 3 ώστε να φαίνεται άμεσο
         for (let i = 0; i < Math.min(3, iframes.length); i++) {
           iframes[i].iframe.loading = "eager";
         }
 
+        // Titles: “ήπια” φόρτωση (batch)
         let titleIdx = 0;
         function pumpTitles() {
           const batch = 6;
