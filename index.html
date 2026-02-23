@@ -245,15 +245,19 @@
           thumb.setAttribute('tabindex', '0');
           thumb.setAttribute('aria-label', 'Play video');
 
+          // Κάνουμε load το iframe όταν πατηθεί το thumbnail
           function loadIframe() {
+            // Αν υπάρχει ήδη iframe, δεν κάνουμε τίποτα
             if (media.querySelector('iframe')) return;
+
             const iframe = document.createElement('iframe');
             iframe.src = buildEmbedSrc(videoId);
             iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
             iframe.allowFullscreen = true;
-            iframe.loading = "eager";
+            iframe.loading = "eager"; // Άμεσο φόρτωμα για τα πρώτα
             iframe.title = "YouTube video player";
-            media.innerHTML = '';
+
+            media.innerHTML = ''; // Καθαρίζουμε το media
             media.appendChild(iframe);
           }
 
@@ -265,13 +269,13 @@
             }
           });
 
-          // Load thumbnail
+          // Load thumbnail image
           const img = document.createElement('img');
           const maxres = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
           const hq = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-          img.loading = "lazy";
+          img.loading = "lazy"; // Lazy loading image
           img.src = maxres;
-          img.onerror = () => { img.src = hq; };
+          img.onerror = () => { img.src = hq; }; // Αν δεν βρει την καλύτερη εικόνα, βάζει την επόμενη
           thumb.appendChild(img);
 
           media.appendChild(thumb);
