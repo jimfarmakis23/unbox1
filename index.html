@@ -6,10 +6,8 @@
   <title>YouTube Videos - Dark Mode</title>
 
   <!-- Speed up connection setup -->
-  <link rel="preconnect" href="https://www.youtube-nocookie.com">
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://i.ytimg.com">
-  <link rel="dns-prefetch" href="https://www.youtube-nocookie.com">
   <link rel="dns-prefetch" href="https://www.youtube.com">
   <link rel="dns-prefetch" href="https://i.ytimg.com">
 
@@ -47,25 +45,29 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+
     .video-card:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 12px rgba(0,0,0,0.4);
     }
 
-    /* ✅ 16:10 (όπως ήταν πριν) */
     .video-media {
       position: relative;
       width: 100%;
       padding-bottom: 62.5%; /* 10/16 = 0.625 */
       background: #000;
     }
-    .video-media iframe {
-      position: absolute;
-      inset: 0;
+
+    .thumbnail {
       width: 100%;
       height: 100%;
-      border: none;
-      background: #000;
+      object-fit: cover;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    .thumbnail:hover {
+      transform: scale(1.05);
     }
 
     .video-title {
@@ -92,6 +94,7 @@
       border-radius: 12px;
       font-size: 1.1rem;
     }
+
     .error-message {
       color: #ff6b6b;
       border: 1px solid #ff6b6b;
@@ -127,7 +130,7 @@
         url = url.trim();
         const patterns = [
           /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-          /youtube\.com\/watch\?.+&v=([^&\n?#]+)/
+          /youtube\.com\/watch\?.+&v=([^&\n?#]+)/,
         ];
         for (let pattern of patterns) {
           const match = url.match(pattern);
@@ -141,17 +144,9 @@
       }
     }
 
-    const EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
-
-    // autoplay=0 για να μη “καίει” bandwidth/CPU χωρίς λόγο
-    function buildEmbedSrc(videoId) {
-      const params = new URLSearchParams({
-        autoplay: "0",
-        rel: "0",
-        modestbranding: "1",
-        playsinline: "1"
-      });
-      return `${EMBED_BASE}${videoId}?${params.toString()}`;
+    // Fetch the thumbnail image for the video
+    function fetchThumbnail(videoId) {
+      return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
     }
 
     // Titles (oEmbed)
@@ -177,7 +172,7 @@
       }
     }
 
-    // GitHub Pages σε repo subfolder: το ./ βοηθάει
+    // Fetch links from text file and load thumbnails
     fetch('./data/links.txt')
       .then(response => {
         if (!response.ok) {
@@ -198,7 +193,7 @@
           return;
         }
 
-        const iframes = [];
+        const thumbnails = [];
 
         links.forEach((link, idx) => {
           const videoId = getVideoId(link);
@@ -210,17 +205,13 @@
           const media = document.createElement('div');
           media.className = 'video-media';
 
-          const iframe = document.createElement('iframe');
-          iframe.src = buildEmbedSrc(videoId);
-          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-          iframe.allowFullscreen = true;
+          const thumbnailImg = document.createElement('img');
+          thumbnailImg.src = fetchThumbnail(videoId);
+          thumbnailImg.alt = "YouTube Thumbnail";
+          thumbnailImg.className = 'thumbnail';
+          thumbnailImg.onclick = () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank'); // Open video on click
 
-          // Browser-native lazy load για να μην “μπουκώσει”
-          iframe.loading = "lazy";
-          iframe.referrerPolicy = "strict-origin-when-cross-origin";
-          iframe.title = "YouTube video player";
-
-          media.appendChild(iframe);
+          media.appendChild(thumbnailImg);
 
           const title = document.createElement('div');
           title.className = 'video-title';
@@ -231,24 +222,19 @@
           card.appendChild(title);
           container.appendChild(card);
 
-          iframes.push({ iframe, videoId, titleEl: title });
+          thumbnails.push({ videoId, titleEl: title });
         });
-
-        // Eager για τα πρώτα 3 ώστε να φαίνεται άμεσο
-        for (let i = 0; i < Math.min(3, iframes.length); i++) {
-          iframes[i].iframe.loading = "eager";
-        }
 
         // Titles: “ήπια” φόρτωση (batch)
         let titleIdx = 0;
         function pumpTitles() {
           const batch = 6;
-          const end = Math.min(titleIdx + batch, iframes.length);
+          const end = Math.min(titleIdx + batch, thumbnails.length);
           for (; titleIdx < end; titleIdx++) {
-            const item = iframes[titleIdx];
+            const item = thumbnails[titleIdx];
             fetchTitle(item.videoId).then(t => item.titleEl.textContent = t);
           }
-          if (titleIdx < iframes.length) setTimeout(pumpTitles, 250);
+          if (titleIdx < thumbnails.length) setTimeout(pumpTitles, 250);
         }
         pumpTitles();
       })
